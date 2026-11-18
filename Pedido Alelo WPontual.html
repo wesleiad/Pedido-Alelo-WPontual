@@ -962,7 +962,7 @@ function recalcular() {
   mostrarResultado();
 }
 
-function prontaParaEnviar(l) { return l.incluir && l.v.valor > 0 && l.dados.cpf.length === 11 && !!l.dados.nasc; }
+function prontaParaEnviar(l) { return l.incluir && l.v.valor > 0 && l.dados.cpf.length === 11; }   // sem nascimento também vai (célula em branco) e é listado na Conferência
 
 function mostrarResultado() {
   const tb = $('tbResultado');
@@ -1029,7 +1029,8 @@ $('btGerar').addEventListener('click', () => {
   const aoa = [COLUNAS];
   for (const l of env) {
     const d = l.dados;
-    const nasc = deIso(d.nasc); nasc.setHours(0, 0, 0, 0);
+    const nasc = d.nasc ? deIso(d.nasc) : null;
+    if (nasc) nasc.setHours(0, 0, 0, 0);
     aoa.push([nomeAlelo(d.nome), Number(d.cpf), nasc, d.tipo, d.local, l.v.valor, d.mae, d.email, d.cel, String(d.matricula || '').slice(0, 13)]);
   }
   const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
@@ -1060,6 +1061,14 @@ function gerarConferencia() {
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols'] = [10, 36, 16, 28, 28, 10, 10, 10, 10, 10, 50].map(w => ({ wch: w }));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Conferência');
+  // Quem está sem data de nascimento (vai no pedido com a data em branco, ou fica de fora se também não tem CPF)
+  const sem = linhas.filter(l => l.incluir && !l.dados.nasc);
+  const aoaSem = [['Matrícula', 'Nome', 'Empresa (CNPJ)', 'CPF', 'Valor', 'Vai no pedido']];
+  for (const l of sem) aoaSem.push([l.f.matricula, l.dados.nome, l.e.cnpj, l.dados.cpf || '', l.v.valor, prontaParaEnviar(l) ? 'Sim (nascimento em branco)' : 'Não (sem CPF)']);
+  if (!sem.length) aoaSem.push(['Ninguém sem data de nascimento.']);
+  const wsSem = XLSX.utils.aoa_to_sheet(aoaSem);
+  wsSem['!cols'] = [10, 36, 16, 14, 10, 28].map(w => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, wsSem, 'Sem nascimento');
   XLSX.writeFile(wb, 'Conferencia_VA' + sufixo() + '.xlsx');
 }
 
