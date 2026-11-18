@@ -949,10 +949,10 @@ function recalcular() {
     const faltas = faltasDoFuncionario(f, situacoesFalta);
     const nBonus = bonusPor.get(chave) || 0;
     const v = calcularValor(faltas, salvo.cfg, nBonus);
-    // Em experiência (admissão + N dias ainda não terminou no fim do período): não ganha o valor.
+    // Em experiência (admissão + N dias ainda não terminou no fim do período): recebe o valor cheio e as faltas NÃO descontam.
     const fimExpF = fimExperiencia(f.admissao, salvo.cfg.experiencia);
     const emExp = !!(fimExpF && p && fimExpF > p.fim);
-    if (emExp) { v.valor = v.bonus; v.desconto = 0; v.quinzenas = 0; }
+    if (emExp) { v.valor = salvo.cfg.valorCheio + v.bonus; v.desconto = 0; v.quinzenas = 0; }
     const valorEditado = valorManual.has(chave);
     if (valorEditado) v.valor = valorManual.get(chave);
     const cad = acharCadastro(f, e.cnpj);
@@ -969,7 +969,7 @@ function recalcular() {
     if (!dados.cpf || dados.cpf.length !== 11) obs.push({ t: 'erro', s: 'Sem CPF' });
     if (!dados.nasc) obs.push({ t: 'erro', s: 'Sem nascimento' });
     if (valorEditado) obs.push({ t: 'aviso', s: 'Valor editado' });
-    if (emExp) obs.push({ t: 'aviso', s: 'Em experiência até ' + fmtData(fimExpF) + ': não ganha' });
+    if (emExp) obs.push({ t: 'aviso', s: 'Em experiência até ' + fmtData(fimExpF) + ': valor cheio, faltas não descontam' });
     else if (f.admissao && p && f.admissao > p.inicio) obs.push({ t: 'aviso', s: 'Admitido em ' + fmtData(f.admissao) });
     if (v.valor <= 0) obs.push({ t: 'aviso', s: 'Valor zero: não vai no pedido' });
     if (nBonus) obs.push({ t: 'ok', s: nBonus + ' indicação(ões)' });
