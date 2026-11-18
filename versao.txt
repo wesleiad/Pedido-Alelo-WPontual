@@ -1,5 +1,5 @@
-2026.11.18.1144
+2026.11.18.1156
 Pedido Alelo WPontual.exe|cc96ebf11b16420b502836cb5fabcd028860c28d3d8fbdfa0d94f1c0b6e9731a
-Pedido Alelo WPontual.html|ea1e72ce36e66ddf4803161f4a6e206559de1bcc872270acd7f4a3fa422a4424
+Pedido Alelo WPontual.html|2398d0e7beb87676f463314cfb421d8bdd3ed577a25783d0920658bb260ca359
 LEIA-ME.txt|9a0fefc47b23c0bebd75bc28753c9b7804a3ca209deb07f0e18264640cafece9
 Como usar - Pedido Alelo WPontual.pdf|b2c6195c53f64242fa410ff0f5925d40729021909e4a778c9ed2b8832ebb3d67

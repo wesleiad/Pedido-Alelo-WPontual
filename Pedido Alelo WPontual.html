@@ -110,6 +110,10 @@ details summary { cursor: pointer; color: var(--suave); margin-top: 8px; }
         <label class="campo">Valor cheio do encarregado (R$)<input type="number" id="cfgValorEnc" step="0.01" min="0"></label>
       </div>
       <div id="grupos" style="display:grid;gap:6px;margin-top:12px"></div>
+      <div style="margin-top:14px"><b>Ignorar situações (nunca descontam)</b>
+        <p class="ajuda" style="margin:4px 0 6px">Digite uma palavra ou parte do nome da situação, como aparece no WPontual (ex.: Banco de Horas). Qualquer situação que tenha esse texto é ignorada: não desconta, mesmo se estiver marcada abaixo, e a pessoa recebe o valor. "Compensação" já é sempre ignorada.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><input type="text" id="ignNovo" placeholder="ex.: Banco de Horas" style="min-width:240px"><button type="button" id="btIgnAdd">Adicionar</button></div>
+        <div class="chips" id="ignLista" style="margin-top:8px"></div></div>
       <p class="ajuda" style="margin:10px 0 4px">1ª quinzena: dia 26 a 10 · 2ª quinzena: dia 11 a 25. Meio dia de falta também conta. Situações que contam como falta:</p>
       <div class="chips" id="situacoes"><span class="ajuda">Carregue um espelho para ver as situações.</span></div>
     </section>
@@ -297,6 +301,16 @@ function lerEspelho(texto, nomeArquivo) {
   return res;
 }
 
+// Situações que nunca descontam: Compensação (fixo) + palavras digitadas na tela (campo "Ignorar situações").
+let _ignorar = [];
+function definirIgnoradas(lista) { _ignorar = (lista || []).map(normalizarNome).filter(Boolean); }
+function ehIgnorada(sit) {
+  if (!sit) return false;
+  if (/compens|\bcomp\b/i.test(sit)) return true;
+  const nome = normalizarNome(sit);
+  return _ignorar.some(t => nome.includes(t));
+}
+
 // Situações que contam como falta por padrão ("F a l t a" no WPontual).
 // Também desconta sempre: Falta Justificada, Falta Horas (parcial), Abono Horas e Atestado (de horas).
 // "Atestado Dias" continua pela caixa "Atestado desconta".
@@ -316,7 +330,7 @@ function grupoDaSituacao(sit) { const g = GRUPOS_DESCONTO.find(x => x.re.test(si
 function quinzenaDoDia(dia) { return (dia >= 26 || dia <= 10) ? 1 : 2; }
 
 function faltasDoFuncionario(func, situacoesFalta) {
-  const conta = s => !!s && situacoesFalta.has(s) && !/compens|\bcomp\b/i.test(s);   // Compensação nunca desconta
+  const conta = s => !!s && situacoesFalta.has(s) && !ehIgnorada(s);   // Compensação e as palavras de "ignorar" nunca descontam
   const dias = [...func.dias.values()].filter(d => !d.marcador)
     .sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes) || (a.dia - b.dia));
   // Dias seguidos com o mesmo motivo viram um intervalo: "01/07 a 10/07 – Afastamento INSS".
@@ -358,7 +372,7 @@ function fimExperiencia(admissao, dias) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { normalizarNome, soDigitos, linhasDoRelatorio, lerEspelho, ehFaltaPadrao, quinzenaDoDia,
+  module.exports = { definirIgnoradas, ehIgnorada, normalizarNome, soDigitos, linhasDoRelatorio, lerEspelho, ehFaltaPadrao, quinzenaDoDia,
     faltasDoFuncionario, calcularValor, GRUPOS_DESCONTO, grupoDaSituacao, fimExperiencia, dataBR, fmtData };
 }
 </script>
@@ -539,7 +553,7 @@ const EMPRESAS = {
 const EMP_ID = /filial/i.test(location.hash) ? 'filial' : 'matriz';
 const EMP = EMPRESAS[EMP_ID];
 const CHAVE = 'pedidoAleloWP.v1.' + EMP_ID;   // cada empresa guarda CPF, indicações e regras separados
-const PADRAO = { valorCheio: 300, valorEncarregado: 300, desconto: 150, bonus: 150, experiencia: 90, descontos: {}, wpNome: EMP.nome, wpCnpj: EMP.cnpj };
+const PADRAO = { valorCheio: 300, valorEncarregado: 300, ignorar: ['Banco de Horas'], desconto: 150, bonus: 150, experiencia: 90, descontos: {}, wpNome: EMP.nome, wpCnpj: EMP.cnpj };
 document.title = 'Pedido Alelo VA - ' + EMP.nome;
 $('tituloEmp').textContent = '· ' + EMP.nome;
 document.querySelectorAll('.empNome').forEach(x => x.textContent = EMP.nome);
@@ -578,6 +592,23 @@ $('grupos').querySelectorAll('[data-grupo]').forEach(cb => cb.onchange = () => {
   salvo.cfg.descontos = { ...salvo.cfg.descontos, [cb.dataset.grupo]: cb.checked };
   guardar(); montarSituacoes(); recalcular();
 });
+
+// Situações ignoradas (nunca descontam), digitadas na tela.
+definirIgnoradas(salvo.cfg.ignorar);
+function mostrarIgnoradas() {
+  $('ignLista').innerHTML = (salvo.cfg.ignorar || []).map((x, i) => `<label style="gap:6px">${esc(x)} <button type="button" data-ignrem="${i}" title="Remover" style="padding:0 7px">✕</button></label>`).join('') || '<span class="ajuda">Nenhuma palavra ignorada além de Compensação.</span>';
+  $('ignLista').querySelectorAll('[data-ignrem]').forEach(b => b.onclick = () => { salvo.cfg.ignorar.splice(+b.dataset.ignrem, 1); aplicarIgnoradas(); });
+}
+function aplicarIgnoradas() { definirIgnoradas(salvo.cfg.ignorar); guardar(); mostrarIgnoradas(); montarSituacoes(); recalcular(); }
+function adicionarIgnorada() {
+  const v = $('ignNovo').value.trim(); if (!v) return;
+  salvo.cfg.ignorar = salvo.cfg.ignorar || [];
+  if (!salvo.cfg.ignorar.some(x => normalizarNome(x) === normalizarNome(v))) salvo.cfg.ignorar.push(v);
+  $('ignNovo').value = ''; aplicarIgnoradas();
+}
+$('btIgnAdd').addEventListener('click', adicionarIgnorada);
+$('ignNovo').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); adicionarIgnorada(); } });
+mostrarIgnoradas();
 
 // ---------- cadastro ----------
 function dataDoExcel(v) {
@@ -800,7 +831,7 @@ function montarSituacoes() {
   for (const e of espelhos) for (const [s, n] of Object.entries(e.situacoes)) todas[s] = (todas[s] || 0) + n;
   const nomes = Object.keys(todas).sort((a, b) => todas[b] - todas[a]);
   const guardadas = salvo.situacoesFalta ? new Set(salvo.situacoesFalta) : null;
-  const marcada = s => { if (/compens|\bcomp\b/i.test(s)) return false; const g = grupoDaSituacao(s); return ehFaltaPadrao(s) || (g ? !!salvo.cfg.descontos[g] : guardadas ? guardadas.has(s) : false); };   // Compensação nunca desconta
+  const marcada = s => { if (ehIgnorada(s)) return false; const g = grupoDaSituacao(s); return ehFaltaPadrao(s) || (g ? !!salvo.cfg.descontos[g] : guardadas ? guardadas.has(s) : false); };   // Compensação nunca desconta
   situacoesFalta = new Set(nomes.filter(marcada));
   if (!nomes.length) { $('situacoes').innerHTML = '<span class="ajuda">Carregue um espelho para ver as situações.</span>'; return; }
   // Separa em categorias para não ficar tudo junto. "Irregular" tem categoria própria e não está ligada a nenhum grupo.
@@ -815,7 +846,7 @@ function montarSituacoes() {
   ];
   const porCat = CATEGORIAS.map(() => []);
   for (const s of nomes) porCat[CATEGORIAS.findIndex(c => c[1](s))].push(s);
-  const chip = s => `<label><input type="checkbox" value="${esc(s)}" ${situacoesFalta.has(s) ? 'checked' : ''} ${/compens|\bcomp\b/i.test(s) ? 'disabled title="Compensação nunca desconta"' : ''}> ${esc(s)} <span class="ajuda">(${todas[s]})</span></label>`;
+  const chip = s => `<label><input type="checkbox" value="${esc(s)}" ${situacoesFalta.has(s) ? 'checked' : ''} ${ehIgnorada(s) ? 'disabled title="Ignorada: nunca desconta"' : ''}> ${esc(s)} <span class="ajuda">(${todas[s]})</span></label>`;
   $('situacoes').innerHTML = CATEGORIAS.map((c, i) => porCat[i].length
     ? `<div style="flex-basis:100%;margin-top:8px"><b>${c[0]}</b></div>` + porCat[i].map(chip).join('') : '').join('');
   $('situacoes').querySelectorAll('input').forEach(cb => cb.onchange = () => {
