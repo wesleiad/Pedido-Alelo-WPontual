@@ -224,6 +224,7 @@ function lerEspelho(texto, nomeArquivo) {
   const porChave = new Map();
   let atual = null;
   let pendenteMatricula = null;
+  let ultimoDia = null;
 
   for (let i = 0; i < linhas.length; i++) {
     const l = linhas[i];
@@ -256,9 +257,23 @@ function lerEspelho(texto, nomeArquivo) {
         res.funcionarios.push(atual);
       }
       pendenteMatricula = null;
+      ultimoDia = null;
       continue;
     }
     if (atual && (m = /^Data Admiss.o\.*:\s*(\d{2}\/\d{2}\/\d{4})/.exec(l))) { atual.admissao = dataBR(m[1]); continue; }
+    // Linha de continuação do dia (sem data): "           |      | 16:49 17:18 Compensaç ..." = horas compensadas
+    // da parte que o WPontual marcou como "Irregular"; vira Compensação (que nunca desconta).
+    if (atual && ultimoDia && /^\s+\|/.test(l) && /compens/i.test(l.split('|')[2] || '')) {
+      for (const k of ['sit1', 'sit2']) {
+        if (/^irregular$/i.test(ultimoDia[k])) {
+          res.situacoes['Irregular'] = (res.situacoes['Irregular'] || 1) - 1;
+          if (!res.situacoes['Irregular']) delete res.situacoes['Irregular'];
+          ultimoDia[k] = 'Compensação';
+          res.situacoes['Compensação'] = (res.situacoes['Compensação'] || 0) + 1;
+        }
+      }
+      continue;
+    }
     let sit1 = null, sit2 = null;
     if (atual && (m = /^(\d{2})\/(\d{2}) - \S{3}/.exec(l))) {
       sit1 = l.slice(26, 43).trim();
@@ -273,7 +288,8 @@ function lerEspelho(texto, nomeArquivo) {
       const dia = +m[1], mes = +m[2];
       let ano = res.fim ? res.fim.getFullYear() : new Date().getFullYear();
       if (res.inicio && res.fim && mes === res.inicio.getMonth() + 1 && res.inicio.getFullYear() !== res.fim.getFullYear()) ano = res.inicio.getFullYear();
-      atual.dias.set(m[1] + '/' + m[2], { dia, mes, ano, sit1, sit2 });
+      ultimoDia = { dia, mes, ano, sit1, sit2 };
+      atual.dias.set(m[1] + '/' + m[2], ultimoDia);
       for (const s of [sit1, sit2]) if (s) res.situacoes[s] = (res.situacoes[s] || 0) + 1;
     }
   }
@@ -299,7 +315,7 @@ function grupoDaSituacao(sit) { const g = GRUPOS_DESCONTO.find(x => x.re.test(si
 function quinzenaDoDia(dia) { return (dia >= 26 || dia <= 10) ? 1 : 2; }
 
 function faltasDoFuncionario(func, situacoesFalta) {
-  const conta = s => !!s && situacoesFalta.has(s) && !/compensa/i.test(s);   // Compensação nunca desconta
+  const conta = s => !!s && situacoesFalta.has(s) && !/compens|comp/i.test(s);   // Compensação nunca desconta
   const dias = [...func.dias.values()].filter(d => !d.marcador)
     .sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes) || (a.dia - b.dia));
   // Dias seguidos com o mesmo motivo viram um intervalo: "01/07 a 10/07 – Afastamento INSS".
@@ -782,7 +798,7 @@ function montarSituacoes() {
   for (const e of espelhos) for (const [s, n] of Object.entries(e.situacoes)) todas[s] = (todas[s] || 0) + n;
   const nomes = Object.keys(todas).sort((a, b) => todas[b] - todas[a]);
   const guardadas = salvo.situacoesFalta ? new Set(salvo.situacoesFalta) : null;
-  const marcada = s => { if (/compensa/i.test(s)) return false; const g = grupoDaSituacao(s); return ehFaltaPadrao(s) || (g ? !!salvo.cfg.descontos[g] : guardadas ? guardadas.has(s) : false); };   // Compensação nunca desconta
+  const marcada = s => { if (/compens|comp/i.test(s)) return false; const g = grupoDaSituacao(s); return ehFaltaPadrao(s) || (g ? !!salvo.cfg.descontos[g] : guardadas ? guardadas.has(s) : false); };   // Compensação nunca desconta
   situacoesFalta = new Set(nomes.filter(marcada));
   if (!nomes.length) { $('situacoes').innerHTML = '<span class="ajuda">Carregue um espelho para ver as situações.</span>'; return; }
   // Separa em categorias para não ficar tudo junto. "Irregular" tem categoria própria e não está ligada a nenhum grupo.
@@ -797,7 +813,7 @@ function montarSituacoes() {
   ];
   const porCat = CATEGORIAS.map(() => []);
   for (const s of nomes) porCat[CATEGORIAS.findIndex(c => c[1](s))].push(s);
-  const chip = s => `<label><input type="checkbox" value="${esc(s)}" ${situacoesFalta.has(s) ? 'checked' : ''} ${/compensa/i.test(s) ? 'disabled title="Compensação nunca desconta"' : ''}> ${esc(s)} <span class="ajuda">(${todas[s]})</span></label>`;
+  const chip = s => `<label><input type="checkbox" value="${esc(s)}" ${situacoesFalta.has(s) ? 'checked' : ''} ${/compens|comp/i.test(s) ? 'disabled title="Compensação nunca desconta"' : ''}> ${esc(s)} <span class="ajuda">(${todas[s]})</span></label>`;
   $('situacoes').innerHTML = CATEGORIAS.map((c, i) => porCat[i].length
     ? `<div style="flex-basis:100%;margin-top:8px"><b>${c[0]}</b></div>` + porCat[i].map(chip).join('') : '').join('');
   $('situacoes').querySelectorAll('input').forEach(cb => cb.onchange = () => {
