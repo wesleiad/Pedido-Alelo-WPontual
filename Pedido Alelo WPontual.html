@@ -555,6 +555,7 @@ let espelhos = [];            // resultados de lerEspelho
 let situacoesFalta = new Set();
 let cpfFixo = {};   // matrícula -> CPF (dados/<Empresa>/cadastro.json, tirado do CADPONN do WPontual)
 let incluirManual = new Map(); // chave -> true/false escolhido na tela
+let valorManual = new Map();   // chave -> valor digitado no resultado (vale até recarregar a página)
 let pagarManual = new Map();   // id indicação -> true/false
 let linhas = [];               // resultado calculado
 
@@ -952,6 +953,8 @@ function recalcular() {
     const fimExpF = fimExperiencia(f.admissao, salvo.cfg.experiencia);
     const emExp = !!(fimExpF && p && fimExpF > p.fim);
     if (emExp) { v.valor = v.bonus; v.desconto = 0; v.quinzenas = 0; }
+    const valorEditado = valorManual.has(chave);
+    if (valorEditado) v.valor = valorManual.get(chave);
     const cad = acharCadastro(f, e.cnpj);
     if (cad) usados.add(cad);
     const dados = {
@@ -965,6 +968,7 @@ function recalcular() {
     if (!cad) obs.push({ t: 'aviso', s: 'Não está no cadastro' });
     if (!dados.cpf || dados.cpf.length !== 11) obs.push({ t: 'erro', s: 'Sem CPF' });
     if (!dados.nasc) obs.push({ t: 'erro', s: 'Sem nascimento' });
+    if (valorEditado) obs.push({ t: 'aviso', s: 'Valor editado' });
     if (emExp) obs.push({ t: 'aviso', s: 'Em experiência até ' + fmtData(fimExpF) + ': não ganha' });
     else if (f.admissao && p && f.admissao > p.inicio) obs.push({ t: 'aviso', s: 'Admitido em ' + fmtData(f.admissao) });
     if (v.valor <= 0) obs.push({ t: 'aviso', s: 'Valor zero: não vai no pedido' });
@@ -993,19 +997,26 @@ function mostrarResultado() {
     return `<tr class="${l.incluir ? '' : 'fora'}">
       <td><input type="checkbox" data-incluir="${i}" ${l.incluir ? 'checked' : ''}></td>
       <td>${esc(l.f.matricula)}</td>
-      <td>${esc(l.dados.nome)}</td>
-      <td>${cpfOk ? esc(l.dados.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')) : `<input type="text" data-cpf="${i}" placeholder="só números" inputmode="numeric">`}</td>
-      <td>${l.dados.nasc ? fmtData(deIso(l.dados.nasc)) : `<input type="date" data-nasc="${i}">`}</td>
+      <td><input type="text" data-nome="${i}" value="${esc(l.dados.nome)}" style="min-width:210px"></td>
+      <td><input type="text" data-cpf="${i}" value="${esc(l.dados.cpf)}" placeholder="só números" inputmode="numeric" maxlength="14" style="width:118px${cpfOk ? '' : ';border-color:var(--erro)'}"></td>
+      <td><input type="date" data-nasc="${i}" value="${esc(l.dados.nasc || '')}"></td>
       <td>${esc(l.faltas.q1.join(', '))}</td>
       <td>${esc(l.faltas.q2.join(', '))}</td>
       <td class="num">${l.v.desconto ? '−' + moeda(l.v.desconto) : ''}</td>
       <td class="num">${l.v.bonus ? '+' + moeda(l.v.bonus) : ''}</td>
-      <td class="num"><b>${moeda(l.v.valor)}</b></td>
+      <td class="num"><input type="number" data-valor="${i}" value="${l.v.valor}" step="0.01" min="0" style="width:84px;text-align:right;font-weight:700"></td>
       <td>${l.obs.map(o => `<span class="tag ${o.t}">${esc(o.s)}</span>`).join(' ')}</td></tr>`;
   }).join('') || '<tr><td colspan="11" class="ajuda">Ninguém com esse filtro.</td></tr>';
   tb.querySelectorAll('[data-incluir]').forEach(cb => cb.onchange = () => { const l = linhas[+cb.dataset.incluir]; incluirManual.set(l.chave, cb.checked); l.incluir = cb.checked; mostrarResultado(); });
-  tb.querySelectorAll('[data-cpf]').forEach(inp => inp.onchange = () => { const d = soDigitos(inp.value); if (d.length === 11) completarCadastro(linhas[+inp.dataset.cpf], { cpf: d }); else inp.style.borderColor = 'var(--erro)'; });
-  tb.querySelectorAll('[data-nasc]').forEach(inp => inp.onchange = () => { if (inp.value) completarCadastro(linhas[+inp.dataset.nasc], { nasc: inp.value }); });
+  // Tudo editável antes de gerar: nome, CPF, nascimento e valor. Nome/CPF/nascimento ficam guardados no cadastro deste computador.
+  tb.querySelectorAll('[data-nome]').forEach(inp => inp.onchange = () => { const n = inp.value.trim(); if (n) completarCadastro(linhas[+inp.dataset.nome], { nome: n }); });
+  tb.querySelectorAll('[data-cpf]').forEach(inp => inp.onchange = () => { const d = soDigitos(inp.value); if (d.length === 11 || d === '') completarCadastro(linhas[+inp.dataset.cpf], { cpf: d }); else inp.style.borderColor = 'var(--erro)'; });
+  tb.querySelectorAll('[data-nasc]').forEach(inp => inp.onchange = () => completarCadastro(linhas[+inp.dataset.nasc], { nasc: inp.value }));
+  tb.querySelectorAll('[data-valor]').forEach(inp => inp.onchange = () => {
+    const l = linhas[+inp.dataset.valor], x = parseFloat(inp.value);
+    if (isNaN(x) || x < 0) valorManual.delete(l.chave); else valorManual.set(l.chave, x);
+    recalcular();
+  });
 
   const env = linhas.filter(prontaParaEnviar);
   const total = env.reduce((s, l) => s + l.v.valor, 0);
