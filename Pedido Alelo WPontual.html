@@ -107,6 +107,7 @@ details summary { cursor: pointer; color: var(--suave); margin-top: 8px; }
         <label class="campo">Desconto por quinzena com falta (R$)<input type="number" id="cfgDesconto" step="0.01" min="0"></label>
         <label class="campo">Bônus por indicação (R$)<input type="number" id="cfgBonus" step="0.01" min="0"></label>
         <label class="campo">Experiência (dias)<input type="number" id="cfgExperiencia" step="1" min="1"></label>
+        <label class="campo">Valor cheio do encarregado (R$)<input type="number" id="cfgValorEnc" step="0.01" min="0"></label>
       </div>
       <div id="grupos" style="display:grid;gap:6px;margin-top:12px"></div>
       <p class="ajuda" style="margin:10px 0 4px">1ª quinzena: dia 26 a 10 · 2ª quinzena: dia 11 a 25. Meio dia de falta também conta. Situações que contam como falta:</p>
@@ -143,8 +144,8 @@ details summary { cursor: pointer; color: var(--suave); margin-top: 8px; }
       <label><input type="checkbox" id="soFaltas"> Só quem tem desconto, bônus ou pendência</label>
     </div>
     <div class="tabela max"><table>
-      <thead><tr><th>Enviar</th><th>Matr.</th><th>Nome</th><th>CPF</th><th>Nascimento</th><th>Faltas 1ª quinz.</th><th>Faltas 2ª quinz.</th><th class="num">Desconto</th><th class="num">Bônus</th><th class="num">Valor</th><th>Observação</th></tr></thead>
-      <tbody id="tbResultado"><tr><td colspan="11" class="ajuda">Carregue o espelho do WPontual.</td></tr></tbody>
+      <thead><tr><th>Enviar</th><th>Matr.</th><th title="Encarregado: recebe o valor próprio">Enc.</th><th>Nome</th><th>CPF</th><th>Nascimento</th><th>Faltas 1ª quinz.</th><th>Faltas 2ª quinz.</th><th class="num">Desconto</th><th class="num">Bônus</th><th class="num">Valor</th><th>Observação</th></tr></thead>
+      <tbody id="tbResultado"><tr><td colspan="12" class="ajuda">Carregue o espelho do WPontual.</td></tr></tbody>
     </table></div>
     <div class="botoes" style="margin-top:12px">
       <button class="primario" id="btGerar" disabled>Gerar PMEPedidoAF.xlsx (+ conferência)</button>
@@ -538,7 +539,7 @@ const EMPRESAS = {
 const EMP_ID = /filial/i.test(location.hash) ? 'filial' : 'matriz';
 const EMP = EMPRESAS[EMP_ID];
 const CHAVE = 'pedidoAleloWP.v1.' + EMP_ID;   // cada empresa guarda CPF, indicações e regras separados
-const PADRAO = { valorCheio: 300, desconto: 150, bonus: 150, experiencia: 90, descontos: {}, wpNome: EMP.nome, wpCnpj: EMP.cnpj };
+const PADRAO = { valorCheio: 300, valorEncarregado: 300, desconto: 150, bonus: 150, experiencia: 90, descontos: {}, wpNome: EMP.nome, wpCnpj: EMP.cnpj };
 document.title = 'Pedido Alelo VA - ' + EMP.nome;
 $('tituloEmp').textContent = '· ' + EMP.nome;
 document.querySelectorAll('.empNome').forEach(x => x.textContent = EMP.nome);
@@ -547,7 +548,7 @@ window.addEventListener('hashchange', () => location.reload());
 const COLUNAS = ['NOME_COLABORADOR','CPF','DATA_DE_NASCIMENTO','TIPO_DO_LOCAL','LOCAL_DE_ENTREGA','VALOR','FILIACAO_NOME_DA_MAE','EMAIL','TELEFONE_CELULAR','MATRICULA'];
 
 // ---------- dados guardados neste computador ----------
-let salvo = { cfg: { ...PADRAO }, cadastro: [], indicacoes: [], situacoesFalta: null };
+let salvo = { cfg: { ...PADRAO }, cadastro: [], indicacoes: [], situacoesFalta: null, encarregados: [] };   // encarregados: matrículas marcadas
 try { const s = JSON.parse(localStorage.getItem(CHAVE) || 'null'); if (s) salvo = { ...salvo, ...s, cfg: { ...PADRAO, ...(s.cfg || {}) } }; } catch (e) {}
 function guardar() { try { localStorage.setItem(CHAVE, JSON.stringify(salvo)); } catch (e) {} }
 
@@ -563,7 +564,7 @@ const moeda = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ---------- regras ----------
-for (const [id, k] of [['cfgValor','valorCheio'],['cfgDesconto','desconto'],['cfgBonus','bonus'],['cfgExperiencia','experiencia']]) {
+for (const [id, k] of [['cfgValor','valorCheio'],['cfgDesconto','desconto'],['cfgBonus','bonus'],['cfgExperiencia','experiencia'],['cfgValorEnc','valorEncarregado']]) {
   $(id).value = salvo.cfg[k];
   $(id).addEventListener('input', () => { const v = parseFloat($(id).value); if (!isNaN(v)) { salvo.cfg[k] = v; guardar(); recalcular(); } });
 }
@@ -948,11 +949,13 @@ function recalcular() {
     const chave = e.arquivo + '|' + f.matricula;
     const faltas = faltasDoFuncionario(f, situacoesFalta);
     const nBonus = bonusPor.get(chave) || 0;
-    const v = calcularValor(faltas, salvo.cfg, nBonus);
+    const ehEnc = (salvo.encarregados || []).includes(String(+f.matricula));
+    const cfgPessoa = ehEnc ? { ...salvo.cfg, valorCheio: salvo.cfg.valorEncarregado } : salvo.cfg;   // encarregado tem valor próprio
+    const v = calcularValor(faltas, cfgPessoa, nBonus);
     // Em experiência (admissão + N dias ainda não terminou no fim do período): recebe o valor cheio e as faltas NÃO descontam.
     const fimExpF = fimExperiencia(f.admissao, salvo.cfg.experiencia);
     const emExp = !!(fimExpF && p && fimExpF > p.fim);
-    if (emExp) { v.valor = salvo.cfg.valorCheio + v.bonus; v.desconto = 0; v.quinzenas = 0; }
+    if (emExp) { v.valor = cfgPessoa.valorCheio + v.bonus; v.desconto = 0; v.quinzenas = 0; }
     const valorEditado = valorManual.has(chave);
     if (valorEditado) v.valor = valorManual.get(chave);
     const cad = acharCadastro(f, e.cnpj);
@@ -968,6 +971,7 @@ function recalcular() {
     if (!cad) obs.push({ t: 'aviso', s: 'Não está no cadastro' });
     if (!dados.cpf || dados.cpf.length !== 11) obs.push({ t: 'erro', s: 'Sem CPF' });
     if (!dados.nasc) obs.push({ t: 'erro', s: 'Sem nascimento' });
+    if (ehEnc) obs.push({ t: 'ok', s: 'Encarregado' });
     if (valorEditado) obs.push({ t: 'aviso', s: 'Valor editado' });
     if (emExp) obs.push({ t: 'aviso', s: 'Em experiência até ' + fmtData(fimExpF) + ': valor cheio, faltas não descontam' });
     else if (f.admissao && p && f.admissao > p.inicio) obs.push({ t: 'aviso', s: 'Admitido em ' + fmtData(f.admissao) });
@@ -975,7 +979,7 @@ function recalcular() {
     if (nBonus) obs.push({ t: 'ok', s: nBonus + ' indicação(ões)' });
     const padraoIncluir = !faltas.demitido && v.valor > 0;
     const incluir = incluirManual.has(chave) ? incluirManual.get(chave) : padraoIncluir;
-    linhas.push({ chave, f, e, cad, dados, faltas, v, obs, incluir, indicacoes: bonusInd.get(chave) || [] });
+    linhas.push({ chave, f, e, cad, dados, faltas, v, obs, incluir, ehEnc, indicacoes: bonusInd.get(chave) || [] });
   }
   linhas.sort((a, b) => normalizarNome(a.dados.nome).localeCompare(normalizarNome(b.dados.nome)));
   $('foraEspelho').innerHTML = salvo.cadastro.filter(c => !usados.has(c)).map(c => esc(c.nome)).join(' · ') || 'Ninguém.';
@@ -988,7 +992,7 @@ function mostrarResultado() {
   const tb = $('tbResultado');
   const busca = normalizarNome($('busca').value);
   const so = $('soFaltas').checked;
-  if (!linhas.length) { tb.innerHTML = '<tr><td colspan="11" class="ajuda">Carregue o espelho do WPontual.</td></tr>'; $('totais').innerHTML = ''; atualizarBotoes(); return; }
+  if (!linhas.length) { tb.innerHTML = '<tr><td colspan="12" class="ajuda">Carregue o espelho do WPontual.</td></tr>'; $('totais').innerHTML = ''; atualizarBotoes(); return; }
   const vis = linhas.filter(l => (!busca || normalizarNome(l.dados.nome).includes(busca) || l.f.matricula === busca)
     && (!so || l.v.desconto || l.v.bonus || l.obs.some(o => o.t === 'erro' || o.s === 'Não está no cadastro')));
   tb.innerHTML = vis.map(l => {
@@ -997,6 +1001,7 @@ function mostrarResultado() {
     return `<tr class="${l.incluir ? '' : 'fora'}">
       <td><input type="checkbox" data-incluir="${i}" ${l.incluir ? 'checked' : ''}></td>
       <td>${esc(l.f.matricula)}</td>
+      <td><input type="checkbox" data-enc="${i}" ${l.ehEnc ? 'checked' : ''} title="Encarregado"></td>
       <td><input type="text" data-nome="${i}" value="${esc(l.dados.nome)}" style="min-width:210px"></td>
       <td><input type="text" data-cpf="${i}" value="${esc(l.dados.cpf)}" placeholder="só números" inputmode="numeric" maxlength="14" style="width:118px${cpfOk ? '' : ';border-color:var(--erro)'}"></td>
       <td><input type="date" data-nasc="${i}" value="${esc(l.dados.nasc || '')}"></td>
@@ -1006,9 +1011,13 @@ function mostrarResultado() {
       <td class="num">${l.v.bonus ? '+' + moeda(l.v.bonus) : ''}</td>
       <td class="num"><input type="number" data-valor="${i}" value="${l.v.valor}" step="0.01" min="0" style="width:84px;text-align:right;font-weight:700"></td>
       <td>${l.obs.map(o => `<span class="tag ${o.t}">${esc(o.s)}</span>`).join(' ')}</td></tr>`;
-  }).join('') || '<tr><td colspan="11" class="ajuda">Ninguém com esse filtro.</td></tr>';
+  }).join('') || '<tr><td colspan="12" class="ajuda">Ninguém com esse filtro.</td></tr>';
   tb.querySelectorAll('[data-incluir]').forEach(cb => cb.onchange = () => { const l = linhas[+cb.dataset.incluir]; incluirManual.set(l.chave, cb.checked); l.incluir = cb.checked; mostrarResultado(); });
   // Tudo editável antes de gerar: nome, CPF, nascimento e valor. Nome/CPF/nascimento ficam guardados no cadastro deste computador.
+  tb.querySelectorAll('[data-enc]').forEach(cb => cb.onchange = () => {
+    const m = String(+linhas[+cb.dataset.enc].f.matricula); const s = new Set(salvo.encarregados || []);
+    cb.checked ? s.add(m) : s.delete(m); salvo.encarregados = [...s]; guardar(); recalcular();
+  });
   tb.querySelectorAll('[data-nome]').forEach(inp => inp.onchange = () => { const n = inp.value.trim(); if (n) completarCadastro(linhas[+inp.dataset.nome], { nome: n }); });
   tb.querySelectorAll('[data-cpf]').forEach(inp => inp.onchange = () => { const d = soDigitos(inp.value); if (d.length === 11 || d === '') completarCadastro(linhas[+inp.dataset.cpf], { cpf: d }); else inp.style.borderColor = 'var(--erro)'; });
   tb.querySelectorAll('[data-nasc]').forEach(inp => inp.onchange = () => completarCadastro(linhas[+inp.dataset.nasc], { nasc: inp.value }));
@@ -1082,11 +1091,11 @@ $('btGerar').addEventListener('click', () => {
 
 $('btConferencia').addEventListener('click', () => gerarConferencia());
 function gerarConferencia() {
-  const aoa = [['Matrícula', 'Nome', 'Empresa (CNPJ)', 'Faltas 1ª quinzena (26 a 10)', 'Faltas 2ª quinzena (11 a 25)', 'Quinzenas com falta', 'Desconto', 'Bônus indicação', 'Valor', 'Vai no pedido', 'Observação']];
+  const aoa = [['Matrícula', 'Nome', 'Empresa (CNPJ)', 'Faltas 1ª quinzena (26 a 10)', 'Faltas 2ª quinzena (11 a 25)', 'Quinzenas com falta', 'Desconto', 'Bônus indicação', 'Valor', 'Vai no pedido', 'Encarregado', 'Observação']];
   for (const l of linhas) aoa.push([l.f.matricula, l.dados.nome, l.e.cnpj, l.faltas.q1.join(', '), l.faltas.q2.join(', '), l.v.quinzenas, l.v.desconto, l.v.bonus, l.v.valor,
-    prontaParaEnviar(l) ? 'Sim' : 'Não', l.obs.map(o => o.s).concat(l.indicacoes.map(i => 'Indicou ' + i.indicado)).join('; ')]);
+    prontaParaEnviar(l) ? 'Sim' : 'Não', l.ehEnc ? 'Sim' : '', l.obs.map(o => o.s).concat(l.indicacoes.map(i => 'Indicou ' + i.indicado)).join('; ')]);
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [10, 36, 16, 28, 28, 10, 10, 10, 10, 10, 50].map(w => ({ wch: w }));
+  ws['!cols'] = [10, 36, 16, 28, 28, 10, 10, 10, 10, 10, 11, 50].map(w => ({ wch: w }));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Conferência');
   // Quem está sem data de nascimento (vai no pedido com a data em branco, ou fica de fora se também não tem CPF)
   const sem = linhas.filter(l => l.incluir && !l.dados.nasc);
