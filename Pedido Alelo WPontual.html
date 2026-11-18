@@ -264,7 +264,7 @@ function lerEspelho(texto, nomeArquivo) {
     if (atual && (m = /^Data Admiss.o\.*:\s*(\d{2}\/\d{2}\/\d{4})/.exec(l))) { atual.admissao = dataBR(m[1]); continue; }
     // Linha de continuação do dia (sem data): "           |      | 16:49 17:18 Compensaç ..." = horas compensadas
     // da parte que o WPontual marcou como "Irregular"; vira Compensação (que nunca desconta).
-    if (atual && ultimoDia && /^\s+\|/.test(l) && /compens/i.test(l.split('|')[2] || '')) {
+    if (atual && ultimoDia && /^[ *]\s*\|/.test(l) && /compens/i.test(l.split('|')[2] || '')) {
       for (const k of ['sit1', 'sit2']) {
         if (/^irregular$/i.test(ultimoDia[k])) {
           res.situacoes['Irregular'] = (res.situacoes['Irregular'] || 1) - 1;
@@ -301,7 +301,7 @@ function lerEspelho(texto, nomeArquivo) {
 // Também desconta sempre: Falta Justificada, Falta Horas (parcial), Abono Horas e Atestado (de horas).
 // "Atestado Dias" continua pela caixa "Atestado desconta".
 function ehFaltaPadrao(sit) {
-  return /^f\s*a\s*l\s*t\s*a(\s+(justificada|horas))?$/i.test(sit.trim()) || /^abono\s+horas$/i.test(sit.trim()) || /^atestado(\s+horas?)?$/i.test(sit.trim());
+  return /^f\s*a\s*l\s*t\s*a(\s+(jus\w*|horas))?$/i.test(sit.trim()) || /^abono\s+horas$/i.test(sit.trim()) || /^atestado(\s+horas?)?$/i.test(sit.trim());
 }
 
 // Grupos de situações com opção "desconta / não desconta" na tela.
