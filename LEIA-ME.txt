@@ -1,0 +1,43 @@
+PEDIDO ALELO - WPONTUAL (portátil)
+==================================
+Dê duplo clique em "Pedido Alelo WPontual.exe". Ele abre o navegador na página e LÊ SOZINHO o
+Espelho Cartão Ponto mais recente de C:\WPontual\WPontual_Matriz e _Filial (só leitura).
+Deixe a janelinha do programa aberta enquanto usa; feche-a para encerrar.
+(O .html sozinho também abre, mas aí você escolhe os arquivos na mão.)
+Duas abas no topo: MATRIZ e FILIAL. Cada uma guarda CPF, indicações e regras separados.
+
+PASTA "dados" (leve junto com o HTML para outro computador)
+  dados\Matriz\2026-07.json   dados\Filial\2026-07.json   (já incluídos: período 26/06 a 25/07/2026)
+  Contém nome, CPF e nascimento: não deixe em lugar público.
+
+TODO MÊS (depois do dia 25)
+ 0. No WPontual, gere o "Espelho Cartão Ponto" do mês (26 a 25) de TODOS os funcionários, na Matriz e na Filial.
+    O programa pega sozinho o arquivo mais recente (RP029000.0xx / rpo14600.0xx). Se o espelho for de
+    uma pessoa só, vai aparecer 1 funcionário: gere de novo para todos.
+    CPF e nascimento vêm do último .json salvo da pasta dados.
+ 1. Escolha a aba (Matriz ou Filial) e o mês do pedido (período 26 a 25).
+ 2. Traga os dados por UMA destas formas:
+    A) "Abrir dados salvos…": escolha o .json da pasta dados (sem WPontual instalado, serve em qualquer PC).
+    B) "Pasta Dados do WPontual": lê C:\WPontual\WPontual_<Empresa>\Dados (só leitura).
+       Atenção: nos PCs que usam o servidor (\relogio-ponto) essa pasta local pode estar
+       desatualizada. Vale só se tiver os dados do mês.
+    C) "Abrir espelho": o relatório Espelho Cartão Ponto gerado no WPontual depois do dia 25
+       (rpo14600.001 / RP029000.001). Serve para o PC que usa os dados do servidor.
+ 3. Depois de ler por B, clique "Salvar estes dados na pasta…" e escolha a pasta "dados"
+    (ao lado do HTML): ele grava dados\<Empresa>\<aaaa-mm>.json para usar em outro PC.
+ 4. Confira, preencha CPF/nascimento que faltarem, "Gerar PMEPedidoAF.xlsx".
+
+REGRAS: iguais ao Pedido Alelo VA (R$ 300; falta em uma quinzena -R$ 150; nas duas = R$ 0).
+CNPJ de entrega: Matriz 02.809.886/0002-25; Filial 02.809.886/0001-44 (veio do cabeçalho do espelho da Filial; conferir, dá para alterar na tela).
+
+Código-fonte em _build\ (python _build\montar.py remonta o HTML).
+
+LEITURA AUTOMÁTICA POR MÊS (programa .exe)
+ - Escolha o mês na tela: o programa usa o Espelho Cartão Ponto daquele mês, se existir na pasta
+   C:\WPontual\WPontual_<Empresa>. Se não existir, lê direto a pasta Dados do WPontual (só leitura).
+ - Se a pasta Dados ficar em outro lugar, crie "caminhos.txt" ao lado do programa com linhas como:
+     Matriz=C:\WPontual\WPontual_Matriz\Dados
+     Filial=D:\copia\Filial\Dados
+ - A pasta Dados do servidor (\relogio-ponto\...\Dados) fica TRAVADA enquanto o WPontual está em uso: o
+   programa não consegue ler. Se a Dados local do PC estiver velha, gere o Espelho do mês no WPontual
+   (ele aparece sozinho na lista) ou copie a pasta Dados atual para o PC e aponte no caminhos.txt.
