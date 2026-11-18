@@ -553,7 +553,7 @@ const EMPRESAS = {
 const EMP_ID = /filial/i.test(location.hash) ? 'filial' : 'matriz';
 const EMP = EMPRESAS[EMP_ID];
 const CHAVE = 'pedidoAleloWP.v1.' + EMP_ID;   // cada empresa guarda CPF, indicações e regras separados
-const PADRAO = { valorCheio: 300, valorEncarregado: 300, ignorar: ['Banco de Horas'], desconto: 150, bonus: 150, experiencia: 90, descontos: {}, wpNome: EMP.nome, wpCnpj: EMP.cnpj };
+const PADRAO = { valorCheio: 300, valorEncarregado: 300, ignorar: [], desconto: 150, bonus: 150, experiencia: 90, descontos: {}, wpNome: EMP.nome, wpCnpj: EMP.cnpj };
 document.title = 'Pedido Alelo VA - ' + EMP.nome;
 $('tituloEmp').textContent = '· ' + EMP.nome;
 document.querySelectorAll('.empNome').forEach(x => x.textContent = EMP.nome);
@@ -594,6 +594,8 @@ $('grupos').querySelectorAll('[data-grupo]').forEach(cb => cb.onchange = () => {
 });
 
 // Situações ignoradas (nunca descontam), digitadas na tela.
+// Migração única: a versão anterior vinha com "Banco de Horas" de fábrica; agora a lista começa vazia.
+if (!salvo.cfg.ignorarV2) { salvo.cfg.ignorarV2 = true; if ((salvo.cfg.ignorar || []).length === 1 && salvo.cfg.ignorar[0] === 'Banco de Horas') salvo.cfg.ignorar = []; guardar(); }
 definirIgnoradas(salvo.cfg.ignorar);
 function mostrarIgnoradas() {
   $('ignLista').innerHTML = (salvo.cfg.ignorar || []).map((x, i) => `<label style="gap:6px">${esc(x)} <button type="button" data-ignrem="${i}" title="Remover" style="padding:0 7px">✕</button></label>`).join('') || '<span class="ajuda">Nenhuma palavra ignorada além de Compensação.</span>';
